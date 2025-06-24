@@ -1,0 +1,5 @@
+{
+  "name": "Expense Approval System",
+  "description": "A web application for managing and approving expense reports. Users can submit expenses with attachments, and designated approvers can review and approve/decline them. Admins can configure user roles.",
+  "requestFramePermissions": []
+}

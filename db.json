@@ -1,0 +1,58 @@
+{
+  "settings": {
+    "submitterEmail": "rawad.zahreddine@holdalgroup.com",
+    "approverEmail": "digitalage@holdalgroup.com"
+  },
+  "expenses": [
+    {
+      "id": "exp-1750688930277-7fa7e2",
+      "name": "test expense",
+      "amount": 123,
+      "currency": "USD",
+      "category": "Hardware",
+      "submitterEmail": "rawad.zahreddine@holdalgroup.com",
+      "status": "APPROVED",
+      "submittedAt": "2025-06-23T14:28:50.278Z",
+      "attachment": {
+        "filename": "attachmentFile-1750688930262-882131847.pdf",
+        "mimetype": "application/pdf",
+        "path": "uploads/attachmentFile-1750688930262-882131847.pdf",
+        "originalFilename": "tercelogistics.com_21.99USD.pdf"
+      },
+      "approvedOrDeclinedAt": "2025-06-23T14:29:26.600Z"
+    },
+    {
+      "id": "exp-1750689115951-27ec12",
+      "name": "fat7i m3allabati",
+      "amount": 420,
+      "currency": "USD",
+      "category": "Office Supplies",
+      "submitterEmail": "rawad.zahreddine@holdalgroup.com",
+      "status": "APPROVED",
+      "submittedAt": "2025-06-23T14:31:55.951Z",
+      "attachment": {
+        "filename": "attachmentFile-1750689115928-36977774.pdf",
+        "mimetype": "application/pdf",
+        "path": "uploads/attachmentFile-1750689115928-36977774.pdf",
+        "originalFilename": "incomafactory.com_119.88USD.pdf"
+      },
+      "approvedOrDeclinedAt": "2025-06-23T14:32:19.778Z"
+    },
+    {
+      "id": "exp-1750689365460-3dd3c7",
+      "name": "test",
+      "amount": 123123,
+      "currency": "USD",
+      "category": "Meals",
+      "submitterEmail": "rawad.zahreddine@holdalgroup.com",
+      "status": "PENDING",
+      "submittedAt": "2025-06-23T14:36:05.460Z",
+      "attachment": {
+        "filename": "attachmentFile-1750689365426-641306913.pdf",
+        "mimetype": "application/pdf",
+        "path": "uploads/attachmentFile-1750689365426-641306913.pdf",
+        "originalFilename": "Handout for Holdal.docx.pdf"
+      }
+    }
+  ]
+}
