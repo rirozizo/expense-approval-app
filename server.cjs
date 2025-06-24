@@ -103,6 +103,13 @@ app.post('/api/login', checkDbInitialized, async (req, res) => {
       return res.json({ user: { id: 'admin-user', username: 'admin', role: 'ADMIN' } });
     }
 
+    // Check new users table first
+    const user = await database.getUserByEmail(usernameOrEmail);
+    if (user && password === usernameOrEmail) {
+      return res.json({ user: { id: user.id, username: usernameOrEmail, email: usernameOrEmail, role: user.role } });
+    }
+
+    // Fallback to legacy settings for backward compatibility
     const settings = await database.getSettings();
 
     if (settings.submitterEmail && usernameOrEmail === settings.submitterEmail && password === settings.submitterEmail) {
@@ -218,6 +225,92 @@ app.post('/api/expenses', checkDbInitialized, upload.single('attachmentFile'), a
   } catch (error) {
     console.error("Error adding expense:", error);
     res.status(500).json({ message: "Failed to add expense." });
+  }
+});
+
+// GET /api/users
+app.get('/api/users', checkDbInitialized, async (req, res) => {
+  try {
+    const users = await database.getUsers();
+    res.json({ users });
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({ message: 'Failed to fetch users' });
+  }
+});
+
+// POST /api/users
+app.post('/api/users', checkDbInitialized, async (req, res) => {
+  try {
+    const { email, role } = req.body;
+    
+    if (!email || !role) {
+      return res.status(400).json({ message: 'Email and role are required.' });
+    }
+    
+    if (!['SUBMITTER', 'APPROVER'].includes(role)) {
+      return res.status(400).json({ message: 'Role must be SUBMITTER or APPROVER.' });
+    }
+    
+    const existingUser = await database.getUserByEmail(email);
+    if (existingUser) {
+      return res.status(400).json({ message: 'User with this email already exists.' });
+    }
+    
+    const newUser = {
+      id: `user-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
+      email,
+      role,
+      createdAt: new Date().toISOString()
+    };
+    
+    await database.addUser(newUser);
+    res.status(201).json({ user: newUser });
+  } catch (error) {
+    console.error('Add user error:', error);
+    res.status(500).json({ message: 'Failed to add user' });
+  }
+});
+
+// PUT /api/users/:id
+app.put('/api/users/:id', checkDbInitialized, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+    
+    if (!role) {
+      return res.status(400).json({ message: 'Role is required.' });
+    }
+    
+    if (!['SUBMITTER', 'APPROVER'].includes(role)) {
+      return res.status(400).json({ message: 'Role must be SUBMITTER or APPROVER.' });
+    }
+    
+    await database.updateUser(id, role);
+    res.json({ message: 'User updated successfully' });
+  } catch (error) {
+    console.error('Update user error:', error);
+    if (error.message === 'User not found') {
+      res.status(404).json({ message: 'User not found' });
+    } else {
+      res.status(500).json({ message: 'Failed to update user' });
+    }
+  }
+});
+
+// DELETE /api/users/:id
+app.delete('/api/users/:id', checkDbInitialized, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await database.deleteUser(id);
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    if (error.message === 'User not found') {
+      res.status(404).json({ message: 'User not found' });
+    } else {
+      res.status(500).json({ message: 'Failed to delete user' });
+    }
   }
 });
 

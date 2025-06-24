@@ -41,6 +41,18 @@ export interface AppSettings {
   approverEmail: string;
 }
 
+export interface AppUser {
+  id: string;
+  email: string;
+  role: 'SUBMITTER' | 'APPROVER';
+  createdAt: string;
+}
+
+export interface NewUserData {
+  email: string;
+  role: 'SUBMITTER' | 'APPROVER';
+}
+
 // Props for API service functions usually involve partial types or specific request payloads
 export interface LoginCredentials {
   usernameOrEmail: string;

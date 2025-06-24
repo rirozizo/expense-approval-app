@@ -33,6 +33,15 @@ class Database {
         )
       `;
 
+      const createUsersTable = `
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          email TEXT UNIQUE NOT NULL,
+          role TEXT NOT NULL CHECK (role IN ('SUBMITTER', 'APPROVER')),
+          created_at TEXT NOT NULL
+        )
+      `;
+
       const createExpensesTable = `
         CREATE TABLE IF NOT EXISTS expenses (
           id TEXT PRIMARY KEY,
@@ -55,6 +64,14 @@ class Database {
         this.db.run(createSettingsTable, (err) => {
           if (err) {
             console.error('Error creating settings table:', err);
+            reject(err);
+            return;
+          }
+        });
+
+        this.db.run(createUsersTable, (err) => {
+          if (err) {
+            console.error('Error creating users table:', err);
             reject(err);
             return;
           }
@@ -249,6 +266,97 @@ class Database {
             } : undefined
           };
           resolve(expense);
+        }
+      });
+    });
+  }
+
+  // User methods
+  async getUsers() {
+    return new Promise((resolve, reject) => {
+      this.db.all('SELECT * FROM users ORDER BY created_at DESC', (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          const users = rows.map(row => ({
+            id: row.id,
+            email: row.email,
+            role: row.role,
+            createdAt: row.created_at
+          }));
+          resolve(users);
+        }
+      });
+    });
+  }
+
+  async addUser(user) {
+    return new Promise((resolve, reject) => {
+      const { id, email, role, createdAt } = user;
+      this.db.run(
+        'INSERT INTO users (id, email, role, created_at) VALUES (?, ?, ?, ?)',
+        [id, email, role, createdAt],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(user);
+          }
+        }
+      );
+    });
+  }
+
+  async updateUser(userId, role) {
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        'UPDATE users SET role = ? WHERE id = ?',
+        [role, userId],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else if (this.changes === 0) {
+            reject(new Error('User not found'));
+          } else {
+            resolve();
+          }
+        }
+      );
+    });
+  }
+
+  async deleteUser(userId) {
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        'DELETE FROM users WHERE id = ?',
+        [userId],
+        function(err) {
+          if (err) {
+            reject(err);
+          } else if (this.changes === 0) {
+            reject(new Error('User not found'));
+          } else {
+            resolve();
+          }
+        }
+      );
+    });
+  }
+
+  async getUserByEmail(email) {
+    return new Promise((resolve, reject) => {
+      this.db.get('SELECT * FROM users WHERE email = ?', [email], (err, row) => {
+        if (err) {
+          reject(err);
+        } else if (!row) {
+          resolve(null);
+        } else {
+          resolve({
+            id: row.id,
+            email: row.email,
+            role: row.role,
+            createdAt: row.created_at
+          });
         }
       });
     });

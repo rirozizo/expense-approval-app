@@ -1,5 +1,5 @@
 
-import { User, UserRole, Expense, ExpenseStatus, AppSettings, NewExpenseData } from '../types';
+import { User, UserRole, Expense, ExpenseStatus, AppSettings, NewExpenseData, AppUser, NewUserData } from '../types';
 import { LOCAL_STORAGE_KEYS } from '../constants';
 
 // Base URL for the API. Assuming server runs on the same host/port or proxied.
@@ -101,5 +101,34 @@ export const apiService = {
       body: JSON.stringify({ status, userRole }), // Send userRole for server-side authorization
     });
     return updatedExpense;
+  },
+
+  // --- Users ---
+  getUsers: async (): Promise<AppUser[]> => {
+    const { users } = await fetchApi<{ users: AppUser[] }>(`${API_BASE_URL}/users`);
+    return users;
+  },
+
+  addUser: async (userData: NewUserData): Promise<AppUser> => {
+    const { user: newUser } = await fetchApi<{ user: AppUser }>(`${API_BASE_URL}/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userData),
+    });
+    return newUser;
+  },
+
+  updateUser: async (userId: string, role: 'SUBMITTER' | 'APPROVER'): Promise<void> => {
+    await fetchApi(`${API_BASE_URL}/users/${userId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role }),
+    });
+  },
+
+  deleteUser: async (userId: string): Promise<void> => {
+    await fetchApi(`${API_BASE_URL}/users/${userId}`, {
+      method: 'DELETE',
+    });
   },
 };
