@@ -188,8 +188,9 @@ app.get('/api/expenses', checkDbInitialized, async (req, res) => {
 app.post('/api/expenses', checkDbInitialized, upload.single('attachmentFile'), async (req, res) => {
   try {
     const { name, amount, currency, department, submitterEmail } = req.body;
+    const normalizedSubmitterEmail = (submitterEmail || '').trim().toLowerCase();
 
-    if (!name || !amount || !currency || !department || !submitterEmail) {
+    if (!name || !amount || !currency || !department || !normalizedSubmitterEmail) {
       return res.status(400).json({ message: "Missing required expense fields." });
     }
 
@@ -204,7 +205,7 @@ app.post('/api/expenses', checkDbInitialized, upload.single('attachmentFile'), a
       amount: parsedAmount,
       currency,
       department,
-      submitterEmail,
+      submitterEmail: normalizedSubmitterEmail,
       status: 'PENDING',
       submittedAt: new Date().toISOString(),
       attachment: undefined,
@@ -335,8 +336,9 @@ app.put('/api/expenses/:id/approve', checkDbInitialized, async (req, res) => {
   try {
     const { id } = req.params;
     const { userEmail, userRole } = req.body;
+    const normalizedEmail = (userEmail || '').trim().toLowerCase();
 
-    if (!userEmail || !userRole) {
+    if (!normalizedEmail || !userRole) {
       return res.status(400).json({ message: "User email and role are required." });
     }
 
@@ -356,7 +358,7 @@ app.put('/api/expenses/:id/approve', checkDbInitialized, async (req, res) => {
     // Find the pending approval for this user at current level
     const currentLevelApproval = expense.approvals.find(
       approval => approval.level === expense.currentApprovalLevel && 
-                  approval.approverEmail === userEmail && 
+                  approval.approverEmail === normalizedEmail &&
                   approval.status === 'PENDING'
     );
 
@@ -365,7 +367,7 @@ app.put('/api/expenses/:id/approve', checkDbInitialized, async (req, res) => {
     }
 
     // Update the approval record
-    await database.updateApprovalRecord(id, expense.currentApprovalLevel, userEmail, 'APPROVED');
+    await database.updateApprovalRecord(id, expense.currentApprovalLevel, normalizedEmail, 'APPROVED');
 
     // Check if all approvals at current level are complete
     const currentLevelApprovals = expense.approvals.filter(approval => approval.level === expense.currentApprovalLevel);
@@ -424,8 +426,9 @@ app.put('/api/expenses/:id/decline', checkDbInitialized, async (req, res) => {
   try {
     const { id } = req.params;
     const { userEmail, userRole } = req.body;
+    const normalizedEmail = (userEmail || '').trim().toLowerCase();
 
-    if (!userEmail || !userRole) {
+    if (!normalizedEmail || !userRole) {
       return res.status(400).json({ message: "User email and role are required." });
     }
 
@@ -445,7 +448,7 @@ app.put('/api/expenses/:id/decline', checkDbInitialized, async (req, res) => {
     // Find the pending approval for this user at current level
     const currentLevelApproval = expense.approvals.find(
       approval => approval.level === expense.currentApprovalLevel && 
-                  approval.approverEmail === userEmail && 
+                  approval.approverEmail === normalizedEmail &&
                   approval.status === 'PENDING'
     );
 
@@ -454,7 +457,7 @@ app.put('/api/expenses/:id/decline', checkDbInitialized, async (req, res) => {
     }
 
     // Update the approval record and expense status
-    await database.updateApprovalRecord(id, expense.currentApprovalLevel, userEmail, 'DECLINED');
+    await database.updateApprovalRecord(id, expense.currentApprovalLevel, normalizedEmail, 'DECLINED');
     const declinedAt = new Date().toISOString();
     await database.updateExpenseStatus(id, 'DECLINED', declinedAt);
 

@@ -335,6 +335,7 @@ class Database {
           id, name, amount, currency, department, submitterEmail,
           status, submittedAt, attachment
         } = expense;
+        const normalizedSubmitter = (submitterEmail || '').trim().toLowerCase();
 
         // Get approval workflow for this expense
         const workflow = await this.getApprovalWorkflow(department, amount, currency);
@@ -349,7 +350,7 @@ class Database {
         `;
 
         const values = [
-          id, name, amount, currency, department, submitterEmail,
+          id, name, amount, currency, department, normalizedSubmitter,
           status, submittedAt, 1, maxLevel,
           attachment?.filename || null,
           attachment?.mimetype || null,
@@ -637,7 +638,8 @@ class Database {
         
         for (const step of workflow) {
           const approvalId = `approval-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          stmt.run(approvalId, expenseId, step.level, step.recipient, 'PENDING');
+          const recipient = (step.recipient || '').trim().toLowerCase();
+          stmt.run(approvalId, expenseId, step.level, recipient, 'PENDING');
         }
         
         stmt.finalize((err) => {
