@@ -241,6 +241,93 @@ class Database {
     });
   }
 
+  async getExpensesForSubmitter(email) {
+    return new Promise(async (resolve, reject) => {
+      this.db.all(
+        'SELECT * FROM expenses WHERE submitter_email = ? ORDER BY submitted_at DESC',
+        [email],
+        async (err, rows) => {
+          if (err) {
+            reject(err);
+          } else {
+            const expenses = [];
+            for (const row of rows) {
+              const approvals = await this.getApprovalRecords(row.id);
+              expenses.push({
+                id: row.id,
+                name: row.name,
+                amount: row.amount,
+                currency: row.currency,
+                department: row.department,
+                submitterEmail: row.submitter_email,
+                status: row.status,
+                submittedAt: row.submitted_at,
+                approvedOrDeclinedAt: row.approved_or_declined_at,
+                currentApprovalLevel: row.current_approval_level,
+                maxApprovalLevel: row.max_approval_level,
+                approvals: approvals,
+                attachment: row.attachment_filename ? {
+                  filename: row.attachment_filename,
+                  mimetype: row.attachment_mimetype,
+                  path: row.attachment_path,
+                  originalFilename: row.attachment_original_filename
+                } : undefined
+              });
+            }
+            resolve(expenses);
+          }
+        }
+      );
+    });
+  }
+
+  async getExpensesForApprover(email) {
+    return new Promise(async (resolve, reject) => {
+      const query = `
+        SELECT DISTINCT e.*
+        FROM expenses e
+        JOIN approvals a ON e.id = a.expense_id
+        WHERE a.approver_email = ?
+          AND a.status = 'PENDING'
+          AND a.level = e.current_approval_level
+          AND e.status = 'PENDING'
+        ORDER BY e.submitted_at DESC
+      `;
+
+      this.db.all(query, [email], async (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          const expenses = [];
+          for (const row of rows) {
+            const approvals = await this.getApprovalRecords(row.id);
+            expenses.push({
+              id: row.id,
+              name: row.name,
+              amount: row.amount,
+              currency: row.currency,
+              department: row.department,
+              submitterEmail: row.submitter_email,
+              status: row.status,
+              submittedAt: row.submitted_at,
+              approvedOrDeclinedAt: row.approved_or_declined_at,
+              currentApprovalLevel: row.current_approval_level,
+              maxApprovalLevel: row.max_approval_level,
+              approvals: approvals,
+              attachment: row.attachment_filename ? {
+                filename: row.attachment_filename,
+                mimetype: row.attachment_mimetype,
+                path: row.attachment_path,
+                originalFilename: row.attachment_original_filename
+              } : undefined
+            });
+          }
+          resolve(expenses);
+        }
+      });
+    });
+  }
+
   async addExpense(expense) {
     return new Promise(async (resolve, reject) => {
       try {
@@ -248,6 +335,7 @@ class Database {
           id, name, amount, currency, department, submitterEmail,
           status, submittedAt, attachment
         } = expense;
+        const normalizedSubmitter = (submitterEmail || '').trim().toLowerCase();
 
         // Get approval workflow for this expense
         const workflow = await this.getApprovalWorkflow(department, amount, currency);
@@ -262,7 +350,7 @@ class Database {
         `;
 
         const values = [
-          id, name, amount, currency, department, submitterEmail,
+          id, name, amount, currency, department, normalizedSubmitter,
           status, submittedAt, 1, maxLevel,
           attachment?.filename || null,
           attachment?.mimetype || null,
@@ -550,7 +638,8 @@ class Database {
         
         for (const step of workflow) {
           const approvalId = `approval-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          stmt.run(approvalId, expenseId, step.level, step.recipient, 'PENDING');
+          const recipient = (step.recipient || '').trim().toLowerCase();
+          stmt.run(approvalId, expenseId, step.level, recipient, 'PENDING');
         }
         
         stmt.finalize((err) => {

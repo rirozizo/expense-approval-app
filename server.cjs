@@ -95,29 +95,33 @@ app.post('/api/login', checkDbInitialized, async (req, res) => {
   try {
     const { usernameOrEmail, password } = req.body;
 
-    if (!usernameOrEmail || !password) {
+    // Normalize input to avoid case or whitespace issues
+    const normalizedUser = (usernameOrEmail || '').trim().toLowerCase();
+    const normalizedPass = (password || '').trim();
+
+    if (!normalizedUser || !normalizedPass) {
       return res.status(400).json({ message: 'Username/Email and password are required.' });
     }
 
-    if (usernameOrEmail.toLowerCase() === 'admin' && password === 'admin') {
+    if (normalizedUser === 'admin' && normalizedPass === 'admin') {
       return res.json({ user: { id: 'admin-user', username: 'admin', role: 'ADMIN' } });
     }
 
     // Check new users table first
-    const user = await database.getUserByEmail(usernameOrEmail);
-    if (user && password === usernameOrEmail) {
-      return res.json({ user: { id: user.id, username: usernameOrEmail, email: usernameOrEmail, role: user.role } });
+    const user = await database.getUserByEmail(normalizedUser);
+    if (user && normalizedPass === normalizedUser) {
+      return res.json({ user: { id: user.id, username: normalizedUser, email: normalizedUser, role: user.role } });
     }
 
     // Fallback to legacy settings for backward compatibility
     const settings = await database.getSettings();
 
-    if (settings.submitterEmail && usernameOrEmail === settings.submitterEmail && password === settings.submitterEmail) {
-      return res.json({ user: { id: `submitter-${usernameOrEmail}`, username: usernameOrEmail, email: usernameOrEmail, role: 'SUBMITTER' } });
+    if (settings.submitterEmail && normalizedUser === settings.submitterEmail.toLowerCase() && normalizedPass === settings.submitterEmail.toLowerCase()) {
+      return res.json({ user: { id: `submitter-${normalizedUser}`, username: normalizedUser, email: normalizedUser, role: 'SUBMITTER' } });
     }
 
-    if (settings.approverEmail && usernameOrEmail === settings.approverEmail && password === settings.approverEmail) {
-      return res.json({ user: { id: `approver-${usernameOrEmail}`, username: usernameOrEmail, email: usernameOrEmail, role: 'APPROVER' } });
+    if (settings.approverEmail && normalizedUser === settings.approverEmail.toLowerCase() && normalizedPass === settings.approverEmail.toLowerCase()) {
+      return res.json({ user: { id: `approver-${normalizedUser}`, username: normalizedUser, email: normalizedUser, role: 'APPROVER' } });
     }
 
     return res.status(401).json({ message: 'Invalid credentials or user not configured.' });
@@ -162,7 +166,17 @@ app.post('/api/settings', checkDbInitialized, async (req, res) => {
 // GET /api/expenses
 app.get('/api/expenses', checkDbInitialized, async (req, res) => {
   try {
-    const expenses = await database.getExpenses();
+    const { userEmail = '', userRole = '' } = req.query;
+    let expenses;
+
+    if (userRole === 'APPROVER') {
+      expenses = await database.getExpensesForApprover(String(userEmail).toLowerCase());
+    } else if (userRole === 'SUBMITTER') {
+      expenses = await database.getExpensesForSubmitter(String(userEmail).toLowerCase());
+    } else {
+      expenses = await database.getExpenses();
+    }
+
     res.json({ expenses });
   } catch (error) {
     console.error('Get expenses error:', error);
@@ -174,8 +188,9 @@ app.get('/api/expenses', checkDbInitialized, async (req, res) => {
 app.post('/api/expenses', checkDbInitialized, upload.single('attachmentFile'), async (req, res) => {
   try {
     const { name, amount, currency, department, submitterEmail } = req.body;
+    const normalizedSubmitterEmail = (submitterEmail || '').trim().toLowerCase();
 
-    if (!name || !amount || !currency || !department || !submitterEmail) {
+    if (!name || !amount || !currency || !department || !normalizedSubmitterEmail) {
       return res.status(400).json({ message: "Missing required expense fields." });
     }
 
@@ -190,7 +205,7 @@ app.post('/api/expenses', checkDbInitialized, upload.single('attachmentFile'), a
       amount: parsedAmount,
       currency,
       department,
-      submitterEmail,
+      submitterEmail: normalizedSubmitterEmail,
       status: 'PENDING',
       submittedAt: new Date().toISOString(),
       attachment: undefined,
@@ -244,6 +259,7 @@ app.get('/api/users', checkDbInitialized, async (req, res) => {
 app.post('/api/users', checkDbInitialized, async (req, res) => {
   try {
     const { email, role } = req.body;
+    const normalizedEmail = (email || '').trim().toLowerCase();
     
     if (!email || !role) {
       return res.status(400).json({ message: 'Email and role are required.' });
@@ -253,14 +269,14 @@ app.post('/api/users', checkDbInitialized, async (req, res) => {
       return res.status(400).json({ message: 'Role must be SUBMITTER or APPROVER.' });
     }
     
-    const existingUser = await database.getUserByEmail(email);
+    const existingUser = await database.getUserByEmail(normalizedEmail);
     if (existingUser) {
       return res.status(400).json({ message: 'User with this email already exists.' });
     }
     
     const newUser = {
       id: `user-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
-      email,
+      email: normalizedEmail,
       role,
       createdAt: new Date().toISOString()
     };
@@ -320,8 +336,9 @@ app.put('/api/expenses/:id/approve', checkDbInitialized, async (req, res) => {
   try {
     const { id } = req.params;
     const { userEmail, userRole } = req.body;
+    const normalizedEmail = (userEmail || '').trim().toLowerCase();
 
-    if (!userEmail || !userRole) {
+    if (!normalizedEmail || !userRole) {
       return res.status(400).json({ message: "User email and role are required." });
     }
 
@@ -341,7 +358,7 @@ app.put('/api/expenses/:id/approve', checkDbInitialized, async (req, res) => {
     // Find the pending approval for this user at current level
     const currentLevelApproval = expense.approvals.find(
       approval => approval.level === expense.currentApprovalLevel && 
-                  approval.approverEmail === userEmail && 
+                  approval.approverEmail === normalizedEmail &&
                   approval.status === 'PENDING'
     );
 
@@ -350,7 +367,7 @@ app.put('/api/expenses/:id/approve', checkDbInitialized, async (req, res) => {
     }
 
     // Update the approval record
-    await database.updateApprovalRecord(id, expense.currentApprovalLevel, userEmail, 'APPROVED');
+    await database.updateApprovalRecord(id, expense.currentApprovalLevel, normalizedEmail, 'APPROVED');
 
     // Check if all approvals at current level are complete
     const currentLevelApprovals = expense.approvals.filter(approval => approval.level === expense.currentApprovalLevel);
@@ -409,8 +426,9 @@ app.put('/api/expenses/:id/decline', checkDbInitialized, async (req, res) => {
   try {
     const { id } = req.params;
     const { userEmail, userRole } = req.body;
+    const normalizedEmail = (userEmail || '').trim().toLowerCase();
 
-    if (!userEmail || !userRole) {
+    if (!normalizedEmail || !userRole) {
       return res.status(400).json({ message: "User email and role are required." });
     }
 
@@ -430,7 +448,7 @@ app.put('/api/expenses/:id/decline', checkDbInitialized, async (req, res) => {
     // Find the pending approval for this user at current level
     const currentLevelApproval = expense.approvals.find(
       approval => approval.level === expense.currentApprovalLevel && 
-                  approval.approverEmail === userEmail && 
+                  approval.approverEmail === normalizedEmail &&
                   approval.status === 'PENDING'
     );
 
@@ -439,7 +457,7 @@ app.put('/api/expenses/:id/decline', checkDbInitialized, async (req, res) => {
     }
 
     // Update the approval record and expense status
-    await database.updateApprovalRecord(id, expense.currentApprovalLevel, userEmail, 'DECLINED');
+    await database.updateApprovalRecord(id, expense.currentApprovalLevel, normalizedEmail, 'DECLINED');
     const declinedAt = new Date().toISOString();
     await database.updateExpenseStatus(id, 'DECLINED', declinedAt);
 
