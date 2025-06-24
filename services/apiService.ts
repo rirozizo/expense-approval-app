@@ -112,6 +112,22 @@ export const apiService = {
     return updatedExpense;
   },
 
+  // Convenience method used by the dashboard to update an expense's status.
+  // Delegates to the appropriate approve or decline endpoint based on the
+  // desired status.
+  updateExpenseStatus: async (
+    expenseId: string,
+    status: ExpenseStatus.APPROVED | ExpenseStatus.DECLINED,
+    userEmail: string,
+    userRole: UserRole
+  ): Promise<Expense> => {
+    if (status === ExpenseStatus.APPROVED) {
+      return apiService.approveExpense(expenseId, userEmail, userRole);
+    } else {
+      return apiService.declineExpense(expenseId, userEmail, userRole);
+    }
+  },
+
   // --- Users ---
   getUsers: async (): Promise<AppUser[]> => {
     const { users } = await fetchApi<{ users: AppUser[] }>(`${API_BASE_URL}/users`);
