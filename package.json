@@ -7,7 +7,9 @@
     "dev": "concurrently \"npm run start-server\" \"npm run start-client\"",
     "start-server": "node server.cjs",
     "start-client": "npm start",
-    "start": "vite"
+    "start": "vite",
+    "build": "vite build",
+    "test": "node test.mjs"
   },
   "dependencies": {
     "concurrently": "^9.2.0",
