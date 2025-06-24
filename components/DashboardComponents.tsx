@@ -116,12 +116,8 @@ export const DashboardScreen: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const allExpenses = await apiService.getExpenses();
-      if (user?.role === UserRole.SUBMITTER) {
-        setExpenses(allExpenses.filter(exp => exp.submitterEmail === user.email).sort((a,b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime() ));
-      } else { // Admin and Approver see all
-        setExpenses(allExpenses.sort((a,b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime() ));
-      }
+      const allExpenses = await apiService.getExpenses(user?.email, user?.role);
+      setExpenses(allExpenses.sort((a,b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()));
     } catch (err) {
       setError('Failed to load expenses.');
       console.error(err);
