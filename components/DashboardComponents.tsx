@@ -51,7 +51,7 @@ const ExpenseListItem: React.FC<{ expense: Expense, onUpdate: () => void }> = ({
         <Badge status={expense.status} />
       </div>
       <p className="text-gray-700"><span className="font-medium">Amount:</span> {expense.currency} {expense.amount.toFixed(2)}</p>
-      <p className="text-gray-600"><span className="font-medium">Category:</span> {expense.category}</p>
+      <p className="text-gray-600"><span className="font-medium">Department:</span> {expense.department}</p>
       <p className="text-gray-600"><span className="font-medium">Submitted by:</span> {expense.submitterEmail}</p>
       <p className="text-xs text-gray-500"><span className="font-medium">Submitted on:</span> {new Date(expense.submittedAt).toLocaleDateString()}</p>
       {expense.attachment && attachmentDisplayFilename && (
