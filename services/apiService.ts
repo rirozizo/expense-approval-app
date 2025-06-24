@@ -69,8 +69,12 @@ export const apiService = {
   },
 
   // --- Expenses ---
-  getExpenses: async (): Promise<Expense[]> => {
-    const { expenses } = await fetchApi<{ expenses: Expense[] }>(`${API_BASE_URL}/expenses`);
+  getExpenses: async (userEmail?: string, userRole?: UserRole): Promise<Expense[]> => {
+    const params = new URLSearchParams();
+    if (userEmail) params.append('userEmail', userEmail);
+    if (userRole) params.append('userRole', userRole);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const { expenses } = await fetchApi<{ expenses: Expense[] }>(`${API_BASE_URL}/expenses${query}`);
     return expenses;
   },
 

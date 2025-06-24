@@ -166,7 +166,17 @@ app.post('/api/settings', checkDbInitialized, async (req, res) => {
 // GET /api/expenses
 app.get('/api/expenses', checkDbInitialized, async (req, res) => {
   try {
-    const expenses = await database.getExpenses();
+    const { userEmail = '', userRole = '' } = req.query;
+    let expenses;
+
+    if (userRole === 'APPROVER') {
+      expenses = await database.getExpensesForApprover(String(userEmail).toLowerCase());
+    } else if (userRole === 'SUBMITTER') {
+      expenses = await database.getExpensesForSubmitter(String(userEmail).toLowerCase());
+    } else {
+      expenses = await database.getExpenses();
+    }
+
     res.json({ expenses });
   } catch (error) {
     console.error('Get expenses error:', error);
