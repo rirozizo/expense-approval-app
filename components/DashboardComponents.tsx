@@ -15,7 +15,7 @@ const ExpenseListItem: React.FC<{ expense: Expense, onUpdate: () => void }> = ({
     if (!user || (user.role !== UserRole.APPROVER && user.role !== UserRole.ADMIN)) return;
     setIsUpdating(true);
     try {
-      await apiService.updateExpenseStatus(expense.id, status, user.role);
+      await apiService.updateExpenseStatus(expense.id, status, user.email || '', user.role);
       onUpdate(); // Refresh the list
     } catch (error) {
       console.error(`Failed to ${status === ExpenseStatus.APPROVED ? 'approve' : 'decline'} expense:`, error);
