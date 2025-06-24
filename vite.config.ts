@@ -19,6 +19,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         "/api": "http://localhost:3001",
       },
+      host: "0.0.0.0",
       allowedHosts: "all",
     },
   };
