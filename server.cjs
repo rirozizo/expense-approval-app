@@ -173,9 +173,9 @@ app.get('/api/expenses', checkDbInitialized, async (req, res) => {
 // POST /api/expenses
 app.post('/api/expenses', checkDbInitialized, upload.single('attachmentFile'), async (req, res) => {
   try {
-    const { name, amount, currency, category, submitterEmail } = req.body;
+    const { name, amount, currency, department, submitterEmail } = req.body;
 
-    if (!name || !amount || !currency || !category || !submitterEmail) {
+    if (!name || !amount || !currency || !department || !submitterEmail) {
       return res.status(400).json({ message: "Missing required expense fields." });
     }
 
@@ -189,7 +189,7 @@ app.post('/api/expenses', checkDbInitialized, upload.single('attachmentFile'), a
       name,
       amount: parsedAmount,
       currency,
-      category,
+      department,
       submitterEmail,
       status: 'PENDING',
       submittedAt: new Date().toISOString(),
@@ -205,23 +205,24 @@ app.post('/api/expenses', checkDbInitialized, upload.single('attachmentFile'), a
       };
     }
 
-    await database.addExpense(newExpense);
+    const savedExpense = await database.addExpense(newExpense);
 
-    // Email notification to Approver
-    const settings = await database.getSettings();
-    if (settings.approverEmail) {
+    // Email notification to first level approvers
+    const firstLevelApprovals = savedExpense.approvals.filter(approval => approval.level === 1);
+    for (const approval of firstLevelApprovals) {
       sendEmailMock(
-        settings.approverEmail,
+        approval.approverEmail,
         "New Expense Submitted for Your Approval",
-        `A new expense has been submitted by ${newExpense.submitterEmail}:
-        Name: ${newExpense.name}
-        Amount: ${newExpense.currency} ${newExpense.amount.toFixed(2)}
-        Category: ${newExpense.category}
+        `A new expense has been submitted by ${savedExpense.submitterEmail}:
+        Name: ${savedExpense.name}
+        Amount: ${savedExpense.currency} ${savedExpense.amount.toFixed(2)}
+        Department: ${savedExpense.department}
+        Approval Level: ${approval.level}
         Please log in to review.`
       );
     }
     
-    res.status(201).json({ expense: newExpense });
+    res.status(201).json({ expense: savedExpense });
   } catch (error) {
     console.error("Error adding expense:", error);
     res.status(500).json({ message: "Failed to add expense." });
@@ -314,23 +315,18 @@ app.delete('/api/users/:id', checkDbInitialized, async (req, res) => {
   }
 });
 
-// PUT /api/expenses/:id/status
-app.put('/api/expenses/:id/status', checkDbInitialized, async (req, res) => {
+// PUT /api/expenses/:id/approve
+app.put('/api/expenses/:id/approve', checkDbInitialized, async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, userRole } = req.body;
+    const { userEmail, userRole } = req.body;
 
-    if (!status || !userRole) {
-      return res.status(400).json({ message: "Status and user role are required." });
+    if (!userEmail || !userRole) {
+      return res.status(400).json({ message: "User email and role are required." });
     }
 
     if (userRole !== 'APPROVER' && userRole !== 'ADMIN') {
-      return res.status(403).json({ message: 'Unauthorized to update expense status.' });
-    }
-
-    const validStatuses = ['APPROVED', 'DECLINED'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ message: 'Invalid expense status.' });
+      return res.status(403).json({ message: 'Unauthorized to approve expense.' });
     }
 
     const expense = await database.getExpenseById(id);
@@ -338,30 +334,131 @@ app.put('/api/expenses/:id/status', checkDbInitialized, async (req, res) => {
       return res.status(404).json({ message: 'Expense not found.' });
     }
 
-    if (expense.status !== 'PENDING' && userRole === 'APPROVER') {
+    if (expense.status !== 'PENDING') {
       return res.status(403).json({ message: 'Expense is not pending approval.' });
     }
 
-    const approvedOrDeclinedAt = new Date().toISOString();
-    await database.updateExpenseStatus(id, status, approvedOrDeclinedAt);
+    // Find the pending approval for this user at current level
+    const currentLevelApproval = expense.approvals.find(
+      approval => approval.level === expense.currentApprovalLevel && 
+                  approval.approverEmail === userEmail && 
+                  approval.status === 'PENDING'
+    );
+
+    if (!currentLevelApproval) {
+      return res.status(403).json({ message: 'You are not authorized to approve this expense at this level.' });
+    }
+
+    // Update the approval record
+    await database.updateApprovalRecord(id, expense.currentApprovalLevel, userEmail, 'APPROVED');
+
+    // Check if all approvals at current level are complete
+    const currentLevelApprovals = expense.approvals.filter(approval => approval.level === expense.currentApprovalLevel);
+    const completedApprovals = currentLevelApprovals.filter(approval => 
+      approval.approverEmail === userEmail || approval.status === 'APPROVED'
+    );
+
+    if (completedApprovals.length === currentLevelApprovals.length) {
+      // Move to next level or mark as approved
+      if (expense.currentApprovalLevel < expense.maxApprovalLevel) {
+        // Move to next level
+        const nextLevel = expense.currentApprovalLevel + 1;
+        await database.updateExpenseStatus(id, 'PENDING', null, nextLevel);
+        
+        // Notify next level approvers
+        const nextLevelApprovals = expense.approvals.filter(approval => approval.level === nextLevel);
+        for (const approval of nextLevelApprovals) {
+          sendEmailMock(
+            approval.approverEmail,
+            "Expense Approval Required",
+            `An expense requires your approval (Level ${nextLevel}):
+            Name: ${expense.name}
+            Amount: ${expense.currency} ${expense.amount.toFixed(2)}
+            Department: ${expense.department}
+            Submitter: ${expense.submitterEmail}
+            Please log in to review.`
+          );
+        }
+      } else {
+        // Final approval
+        const approvedAt = new Date().toISOString();
+        await database.updateExpenseStatus(id, 'APPROVED', approvedAt);
+        
+        // Notify submitter
+        sendEmailMock(
+          expense.submitterEmail,
+          "Your Expense Has Been Approved",
+          `Your expense submission has been fully approved:
+          Name: ${expense.name}
+          Amount: ${expense.currency} ${expense.amount.toFixed(2)}
+          Department: ${expense.department}`
+        );
+      }
+    }
 
     const updatedExpense = await database.getExpenseById(id);
-
-    // Email notification to Submitter
-    const emailSubject = status === 'APPROVED' 
-      ? "Your Expense Has Been Approved" 
-      : "Your Expense Has Been Declined";
-    const emailBody = `Your expense submission has been ${status.toLowerCase()}:
-      Name: ${updatedExpense.name}
-      Amount: ${updatedExpense.currency} ${updatedExpense.amount.toFixed(2)}
-      Status: ${status}`;
-
-    sendEmailMock(updatedExpense.submitterEmail, emailSubject, emailBody);
-
     res.json({ expense: updatedExpense });
   } catch (error) {
-    console.error("Error updating expense status:", error);
-    res.status(500).json({ message: "Failed to update expense status." });
+    console.error("Error approving expense:", error);
+    res.status(500).json({ message: "Failed to approve expense." });
+  }
+});
+
+// PUT /api/expenses/:id/decline
+app.put('/api/expenses/:id/decline', checkDbInitialized, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userEmail, userRole } = req.body;
+
+    if (!userEmail || !userRole) {
+      return res.status(400).json({ message: "User email and role are required." });
+    }
+
+    if (userRole !== 'APPROVER' && userRole !== 'ADMIN') {
+      return res.status(403).json({ message: 'Unauthorized to decline expense.' });
+    }
+
+    const expense = await database.getExpenseById(id);
+    if (!expense) {
+      return res.status(404).json({ message: 'Expense not found.' });
+    }
+
+    if (expense.status !== 'PENDING') {
+      return res.status(403).json({ message: 'Expense is not pending approval.' });
+    }
+
+    // Find the pending approval for this user at current level
+    const currentLevelApproval = expense.approvals.find(
+      approval => approval.level === expense.currentApprovalLevel && 
+                  approval.approverEmail === userEmail && 
+                  approval.status === 'PENDING'
+    );
+
+    if (!currentLevelApproval) {
+      return res.status(403).json({ message: 'You are not authorized to decline this expense at this level.' });
+    }
+
+    // Update the approval record and expense status
+    await database.updateApprovalRecord(id, expense.currentApprovalLevel, userEmail, 'DECLINED');
+    const declinedAt = new Date().toISOString();
+    await database.updateExpenseStatus(id, 'DECLINED', declinedAt);
+
+    // Notify submitter
+    sendEmailMock(
+      expense.submitterEmail,
+      "Your Expense Has Been Declined",
+      `Your expense submission has been declined:
+      Name: ${expense.name}
+      Amount: ${expense.currency} ${expense.amount.toFixed(2)}
+      Department: ${expense.department}
+      Declined by: ${userEmail}`
+    );
+
+    const updatedExpense = await database.getExpenseById(id);
+    res.json({ expense: updatedExpense });
+  } catch (error) {
+    console.error("Error declining expense:", error);
+    res.status(500).json({ message: "Failed to decline expense." });
   }
 });
 
@@ -381,6 +478,14 @@ async function startServer() {
     await migrate();
   } catch (error) {
     console.log('Migration skipped or completed previously');
+  }
+  
+  // Run workflow migration
+  try {
+    const migrateWorkflow = require('./migrate-workflow.cjs');
+    await migrateWorkflow();
+  } catch (error) {
+    console.log('Workflow migration skipped or completed previously');
   }
   
   app.listen(PORT, '0.0.0.0', () => {

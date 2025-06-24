@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
@@ -27,7 +26,7 @@ const ExpenseListItem: React.FC<{ expense: Expense, onUpdate: () => void }> = ({
       setActionToConfirm(null);
     }
   };
-  
+
   const openConfirmModal = (action: 'approve' | 'decline') => {
     setActionToConfirm(action);
     setShowConfirmModal(true);
@@ -42,7 +41,7 @@ const ExpenseListItem: React.FC<{ expense: Expense, onUpdate: () => void }> = ({
   };
 
   const canApproveDecline = user && (user.role === UserRole.APPROVER || (user.role === UserRole.ADMIN && expense.status === ExpenseStatus.PENDING));
-  
+
   const attachmentDisplayFilename = expense.attachment?.originalFilename || expense.attachment?.filename;
 
   return (
@@ -168,7 +167,76 @@ export const DashboardScreen: React.FC = () => {
       ) : (
         <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {expenses.map(expense => (
-            <ExpenseListItem key={expense.id} expense={expense} onUpdate={fetchExpenses} />
+            <li className="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300 space-y-3" key={expense.id}>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+              <h3 className="text-xl font-semibold text-slate-800">{expense.name}</h3>
+              <Badge status={expense.status} />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-slate-600">
+              <div>
+                <span className="font-medium">Amount:</span> {expense.currency} {expense.amount.toFixed(2)}
+              </div>
+              <div>
+                <span className="font-medium">Department:</span> {expense.department}
+              </div>
+              <div>
+                <span className="font-medium">Submitted:</span> {new Date(expense.submittedAt).toLocaleDateString()}
+              </div>
+            </div>
+
+            {expense.status === ExpenseStatus.PENDING && (
+              <div className="mt-3 text-sm text-slate-600">
+                <span className="font-medium">Approval Progress:</span> Level {expense.currentApprovalLevel} of {expense.maxApprovalLevel}
+                <div className="mt-1">
+                  <div className="flex flex-wrap gap-2">
+                    {expense.approvals.filter(a => a.level === expense.currentApprovalLevel).map((approval, index) => (
+                      <span key={index} className={`px-2 py-1 text-xs rounded ${
+                        approval.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
+                        approval.status === 'DECLINED' ? 'bg-red-100 text-red-800' :
+                        'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {approval.approverEmail} ({approval.status})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <p className="text-gray-600"><span className="font-medium">Submitted by:</span> {expense.submitterEmail}</p>
+            <p className="text-xs text-gray-500"><span className="font-medium">Submitted on:</span> {new Date(expense.submittedAt).toLocaleDateString()}</p>
+            {expense.attachment && (
+              <p className="text-sm text-gray-700">
+                <span className="font-medium">Attachment:</span> {expense.attachment.originalFilename || expense.attachment.filename}
+                {expense.attachment.path && (
+                  <a href={`/${expense.attachment.path}`} target="_blank" rel="noopener noreferrer" className="ml-1 text-blue-600 hover:text-blue-800 hover:underline">
+                    (View/Download)
+                  </a>
+                )}
+              </p>
+            )}
+
+            {canApproveDecline && expense.status === ExpenseStatus.PENDING && (
+              <div className="mt-4 pt-4 border-t border-gray-200 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                <Button onClick={() => openConfirmModal('approve')} variant="success" size="sm" disabled={isUpdating} className="w-full sm:w-auto">
+                  {isUpdating && actionToConfirm === 'approve' ? <LoadingSpinner small /> : 'Approve'}
+                </Button>
+                <Button onClick={() => openConfirmModal('decline')} variant="danger" size="sm" disabled={isUpdating} className="w-full sm:w-auto">
+                  {isUpdating && actionToConfirm === 'decline' ? <LoadingSpinner small /> : 'Decline'}
+                </Button>
+              </div>
+            )}
+
+            {showConfirmModal && actionToConfirm && (
+              <ConfirmModal
+                isOpen={showConfirmModal}
+                onClose={() => setShowConfirmModal(false)}
+                onConfirm={confirmAction}
+                title={`Confirm ${actionToConfirm.charAt(0).toUpperCase() + actionToConfirm.slice(1)}`}
+                message={`Are you sure you want to ${actionToConfirm} this expense?`}
+              />
+            )}
+          </li>
           ))}
         </ul>
       )}

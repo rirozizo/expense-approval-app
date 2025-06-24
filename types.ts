@@ -23,7 +23,7 @@ export interface Expense {
   name: string;
   amount: number;
   currency: string;
-  category: string;
+  department: string;
   status: ExpenseStatus;
   submitterEmail: string;
   submittedAt: string; // ISO date string
@@ -34,6 +34,9 @@ export interface Expense {
     originalFilename?: string; // Original name of the uploaded file
   };
   approvedOrDeclinedAt?: string; // ISO date string
+  currentApprovalLevel: number;
+  maxApprovalLevel: number;
+  approvals: ApprovalRecord[];
 }
 
 export interface AppSettings {
@@ -63,7 +66,24 @@ export interface NewExpenseData {
   name: string;
   amount: number; // Will be sent as string in FormData, parsed by backend
   currency: string;
-  category: string;
+  department: string;
   submitterEmail: string;
   attachment?: File; // The actual file object for upload
+}
+
+export interface ApprovalRecord {
+  level: number;
+  approverEmail: string;
+  status: 'PENDING' | 'APPROVED' | 'DECLINED';
+  approvedAt?: string;
+}
+
+export interface ApprovalRule {
+  id: string;
+  department: string;
+  amountMin: number;
+  amountMax: number;
+  currency: string;
+  level: number;
+  recipient: string;
 }

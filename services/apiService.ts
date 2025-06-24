@@ -79,7 +79,7 @@ export const apiService = {
     formData.append('name', expenseData.name);
     formData.append('amount', expenseData.amount.toString());
     formData.append('currency', expenseData.currency);
-    formData.append('category', expenseData.category);
+    formData.append('department', expenseData.department);
     formData.append('submitterEmail', expenseData.submitterEmail);
 
     if (expenseData.attachment) {
@@ -94,11 +94,20 @@ export const apiService = {
     return newExpense;
   },
 
-  updateExpenseStatus: async (expenseId: string, status: ExpenseStatus, userRole: UserRole): Promise<Expense> => {
-    const { expense: updatedExpense } = await fetchApi<{ expense: Expense }>(`${API_BASE_URL}/expenses/${expenseId}/status`, {
+  approveExpense: async (expenseId: string, userEmail: string, userRole: UserRole): Promise<Expense> => {
+    const { expense: updatedExpense } = await fetchApi<{ expense: Expense }>(`${API_BASE_URL}/expenses/${expenseId}/approve`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status, userRole }), // Send userRole for server-side authorization
+      body: JSON.stringify({ userEmail, userRole }),
+    });
+    return updatedExpense;
+  },
+
+  declineExpense: async (expenseId: string, userEmail: string, userRole: UserRole): Promise<Expense> => {
+    const { expense: updatedExpense } = await fetchApi<{ expense: Expense }>(`${API_BASE_URL}/expenses/${expenseId}/decline`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userEmail, userRole }),
     });
     return updatedExpense;
   },

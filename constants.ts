@@ -3,14 +3,12 @@ export const APP_NAME = "Expense Approval System";
 
 export const CURRENCIES = ['USD', 'EUR', 'GBP'];
 
-export const CATEGORIES = [
-  'Travel',
-  'Meals',
-  'Software',
-  'Hardware',
-  'Office Supplies',
-  'Utilities',
-  'Other',
+export const DEPARTMENTS = [
+  'Logistics',
+  'HR',
+  'Retail',
+  'Incoma',
+  'Para-Pharma',
 ];
 
 // For mock API service
