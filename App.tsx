@@ -8,7 +8,7 @@ import { DashboardScreen } from './components/DashboardComponents';
 import { SettingsScreen } from './components/SettingsScreen';
 import { AddExpenseScreen } from './components/AddExpenseScreen';
 import { Navbar, LoadingSpinner } from './components/shared/UIElements';
-import { APP_NAME } from './constants';
+import { APP_NAME, APP_VERSION } from './constants';
 
 interface AuthContextType {
   user: User | null;
@@ -163,7 +163,7 @@ const AppContent: React.FC = () => {
         </Routes>
       </main>
       <footer className="bg-slate-800 text-white text-center p-4 mt-auto">
-        &copy; {new Date().getFullYear()} {APP_NAME}. All rights reserved.
+        &copy; {new Date().getFullYear()} {APP_NAME} v{APP_VERSION}. All rights reserved.
       </footer>
     </div>
   );
