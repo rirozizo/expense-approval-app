@@ -33,6 +33,25 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(UPLOADS_DIR)); // Serve uploaded files
 
+// --- Serve static files from dist directory (for production) ---
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// --- Serve index.html for all non-API routes (SPA support) ---
+app.get('*', (req, res, next) => {
+  // Skip API routes
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+  
+  // For development, redirect to Vite dev server
+  if (process.env.NODE_ENV !== 'production') {
+    return res.redirect('http://localhost:5173');
+  }
+  
+  // For production, serve index.html
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
 // --- Multer Setup (for file uploads) ---
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
