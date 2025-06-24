@@ -1,4 +1,3 @@
-
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -42,12 +41,12 @@ app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/')) {
     return next();
   }
-  
+
   // For development, redirect to Vite dev server
   if (process.env.NODE_ENV !== 'production') {
     return res.redirect('http://localhost:5173');
   }
-  
+
   // For production, serve index.html
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
@@ -109,7 +108,7 @@ app.post('/api/login', (req, res) => {
   if (usernameOrEmail.toLowerCase() === 'admin' && password === 'admin') {
     return res.json({ user: { id: 'admin-user', username: 'admin', role: 'ADMIN' } });
   }
-  
+
   if (settings.submitterEmail && usernameOrEmail === settings.submitterEmail && password === settings.submitterEmail) {
     return res.json({ user: { id: `submitter-${usernameOrEmail}`, username: usernameOrEmail, email: usernameOrEmail, role: 'SUBMITTER' } });
   }
@@ -152,7 +151,7 @@ app.get('/api/expenses', (req, res) => {
 app.post('/api/expenses', upload.single('attachmentFile'), (req, res) => {
   try {
     const { name, amount, currency, category, submitterEmail } = req.body;
-    
+
     if (!name || !amount || !currency || !category || !submitterEmail) {
         return res.status(400).json({ message: "Missing required expense fields." });
     }
@@ -231,7 +230,7 @@ app.put('/api/expenses/:id/status', (req, res) => {
   if (expenseIndex === -1) {
     return res.status(404).json({ message: 'Expense not found.' });
   }
-  
+
   // Approvers can only act on PENDING expenses. Admins might have more leeway (not implemented here).
   if (db.expenses[expenseIndex].status !== 'PENDING' && userRole === 'APPROVER') {
     return res.status(403).json({ message: 'Expense is not pending approval.' });
@@ -252,9 +251,9 @@ app.put('/api/expenses/:id/status', (req, res) => {
     Name: ${updatedExpense.name}
     Amount: ${updatedExpense.currency} ${updatedExpense.amount.toFixed(2)}
     Status: ${status}`;
-  
+
   sendEmailMock(updatedExpense.submitterEmail, emailSubject, emailBody);
-  
+
   res.json({ expense: updatedExpense });
 });
 
@@ -266,8 +265,8 @@ app.use((err, req, res, next) => {
 });
 
 // --- Start Server ---
-app.listen(PORT, () => {
-  console.log(`Server listening on http://localhost:\${PORT}`);
-  console.log(`Uploads directory: \${UPLOADS_DIR}`);
-  console.log(`Database file: \${DB_FILE}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server listening on http://0.0.0.0:${PORT}`);
+  console.log(`Uploads directory: ${UPLOADS_DIR}`);
+  console.log(`Database file: ${DB_FILE}`);
 });
