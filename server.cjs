@@ -1,29 +1,36 @@
+
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const Database = require('./database.cjs');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // --- Configuration ---
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
-const DB_FILE = path.join(__dirname, 'db.json');
 
 // --- Create uploads directory if it doesn't exist ---
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
-// --- Initialize DB file if it doesn't exist ---
-const initialDbState = {
-  settings: { submitterEmail: "", approverEmail: "" },
-  expenses: []
-};
-if (!fs.existsSync(DB_FILE)) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(initialDbState, null, 2), 'utf8');
+// --- Initialize Database ---
+const database = new Database();
+let dbInitialized = false;
+
+async function initializeDatabase() {
+  try {
+    await database.init();
+    dbInitialized = true;
+    console.log('Database initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize database:', error);
+    process.exit(1);
+  }
 }
 
 // --- Middleware ---
@@ -64,25 +71,6 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// --- Helper Functions for DB ---
-const readDb = () => {
-  try {
-    const data = fs.readFileSync(DB_FILE, 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    console.error("Error reading DB:", error);
-    return { ...initialDbState }; // Return default if error
-  }
-};
-
-const writeDb = (data) => {
-  try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
-  } catch (error) {
-    console.error("Error writing to DB:", error);
-  }
-};
-
 // --- Mock Email Service ---
 const sendEmailMock = (to, subject, body) => {
   console.log(`\nSERVER SENDING EMAIL (MOCK):`);
@@ -92,76 +80,103 @@ const sendEmailMock = (to, subject, body) => {
   console.log(`  --------------------\n`);
 };
 
+// --- Middleware to check database initialization ---
+const checkDbInitialized = (req, res, next) => {
+  if (!dbInitialized) {
+    return res.status(503).json({ message: 'Database not initialized' });
+  }
+  next();
+};
 
 // --- API Endpoints ---
 
 // POST /api/login
-app.post('/api/login', (req, res) => {
-  const { usernameOrEmail, password } = req.body;
-  const db = readDb();
-  const { settings } = db;
+app.post('/api/login', checkDbInitialized, async (req, res) => {
+  try {
+    const { usernameOrEmail, password } = req.body;
 
-  if (!usernameOrEmail || !password) {
-    return res.status(400).json({ message: 'Username/Email and password are required.' });
+    if (!usernameOrEmail || !password) {
+      return res.status(400).json({ message: 'Username/Email and password are required.' });
+    }
+
+    if (usernameOrEmail.toLowerCase() === 'admin' && password === 'admin') {
+      return res.json({ user: { id: 'admin-user', username: 'admin', role: 'ADMIN' } });
+    }
+
+    const settings = await database.getSettings();
+
+    if (settings.submitterEmail && usernameOrEmail === settings.submitterEmail && password === settings.submitterEmail) {
+      return res.json({ user: { id: `submitter-${usernameOrEmail}`, username: usernameOrEmail, email: usernameOrEmail, role: 'SUBMITTER' } });
+    }
+
+    if (settings.approverEmail && usernameOrEmail === settings.approverEmail && password === settings.approverEmail) {
+      return res.json({ user: { id: `approver-${usernameOrEmail}`, username: usernameOrEmail, email: usernameOrEmail, role: 'APPROVER' } });
+    }
+
+    return res.status(401).json({ message: 'Invalid credentials or user not configured.' });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
-
-  if (usernameOrEmail.toLowerCase() === 'admin' && password === 'admin') {
-    return res.json({ user: { id: 'admin-user', username: 'admin', role: 'ADMIN' } });
-  }
-
-  if (settings.submitterEmail && usernameOrEmail === settings.submitterEmail && password === settings.submitterEmail) {
-    return res.json({ user: { id: `submitter-${usernameOrEmail}`, username: usernameOrEmail, email: usernameOrEmail, role: 'SUBMITTER' } });
-  }
-
-  if (settings.approverEmail && usernameOrEmail === settings.approverEmail && password === settings.approverEmail) {
-    return res.json({ user: { id: `approver-${usernameOrEmail}`, username: usernameOrEmail, email: usernameOrEmail, role: 'APPROVER' } });
-  }
-
-  return res.status(401).json({ message: 'Invalid credentials or user not configured.' });
 });
 
 // GET /api/settings
-app.get('/api/settings', (req, res) => {
-  const db = readDb();
-  res.json({ settings: db.settings });
+app.get('/api/settings', checkDbInitialized, async (req, res) => {
+  try {
+    const settings = await database.getSettings();
+    res.json({ settings });
+  } catch (error) {
+    console.error('Get settings error:', error);
+    res.status(500).json({ message: 'Failed to fetch settings' });
+  }
 });
 
 // POST /api/settings
-app.post('/api/settings', (req, res) => {
-  const { submitterEmail, approverEmail } = req.body;
-   if (typeof submitterEmail !== 'string' || typeof approverEmail !== 'string') {
-    return res.status(400).json({ message: 'Invalid email format for settings.' });
+app.post('/api/settings', checkDbInitialized, async (req, res) => {
+  try {
+    const { submitterEmail, approverEmail } = req.body;
+    
+    if (typeof submitterEmail !== 'string' || typeof approverEmail !== 'string') {
+      return res.status(400).json({ message: 'Invalid email format for settings.' });
+    }
+    
+    if (submitterEmail === approverEmail && submitterEmail !== '') {
+      return res.status(400).json({ message: 'Submitter and Approver emails cannot be the same.' });
+    }
+    
+    const settings = await database.saveSettings(submitterEmail, approverEmail);
+    res.json({ settings });
+  } catch (error) {
+    console.error('Save settings error:', error);
+    res.status(500).json({ message: 'Failed to save settings' });
   }
-  if (submitterEmail === approverEmail && submitterEmail !== '') {
-    return res.status(400).json({ message: 'Submitter and Approver emails cannot be the same.' });
-  }
-  const db = readDb();
-  db.settings = { submitterEmail, approverEmail };
-  writeDb(db);
-  res.json({ settings: db.settings });
 });
 
 // GET /api/expenses
-app.get('/api/expenses', (req, res) => {
-  const db = readDb();
-  res.json({ expenses: db.expenses || [] });
+app.get('/api/expenses', checkDbInitialized, async (req, res) => {
+  try {
+    const expenses = await database.getExpenses();
+    res.json({ expenses });
+  } catch (error) {
+    console.error('Get expenses error:', error);
+    res.status(500).json({ message: 'Failed to fetch expenses' });
+  }
 });
 
 // POST /api/expenses
-app.post('/api/expenses', upload.single('attachmentFile'), (req, res) => {
+app.post('/api/expenses', checkDbInitialized, upload.single('attachmentFile'), async (req, res) => {
   try {
     const { name, amount, currency, category, submitterEmail } = req.body;
 
     if (!name || !amount || !currency || !category || !submitterEmail) {
-        return res.status(400).json({ message: "Missing required expense fields." });
+      return res.status(400).json({ message: "Missing required expense fields." });
     }
 
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
-        return res.status(400).json({ message: "Invalid amount." });
+      return res.status(400).json({ message: "Invalid amount." });
     }
 
-    const db = readDb();
     const newExpense = {
       id: `exp-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
       name,
@@ -176,20 +191,20 @@ app.post('/api/expenses', upload.single('attachmentFile'), (req, res) => {
 
     if (req.file) {
       newExpense.attachment = {
-        filename: req.file.filename, // Name of the file on the server (e.g., attachmentFile-16298....png)
+        filename: req.file.filename,
         mimetype: req.file.mimetype,
-        path: `uploads/${req.file.filename}`, // URL-friendly path (e.g., uploads/attachmentFile-16298....png)
+        path: `uploads/${req.file.filename}`,
         originalFilename: req.file.originalname,
       };
     }
 
-    db.expenses.push(newExpense);
-    writeDb(db);
+    await database.addExpense(newExpense);
 
     // Email notification to Approver
-    if (db.settings.approverEmail) {
+    const settings = await database.getSettings();
+    if (settings.approverEmail) {
       sendEmailMock(
-        db.settings.approverEmail,
+        settings.approverEmail,
         "New Expense Submitted for Your Approval",
         `A new expense has been submitted by ${newExpense.submitterEmail}:
         Name: ${newExpense.name}
@@ -198,6 +213,7 @@ app.post('/api/expenses', upload.single('attachmentFile'), (req, res) => {
         Please log in to review.`
       );
     }
+    
     res.status(201).json({ expense: newExpense });
   } catch (error) {
     console.error("Error adding expense:", error);
@@ -206,57 +222,55 @@ app.post('/api/expenses', upload.single('attachmentFile'), (req, res) => {
 });
 
 // PUT /api/expenses/:id/status
-app.put('/api/expenses/:id/status', (req, res) => {
-  const { id } = req.params;
-  const { status, userRole } = req.body; // userRole for authorization check
+app.put('/api/expenses/:id/status', checkDbInitialized, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, userRole } = req.body;
 
-  if (!status || !userRole) {
-    return res.status(400).json({ message: "Status and user role are required." });
+    if (!status || !userRole) {
+      return res.status(400).json({ message: "Status and user role are required." });
+    }
+
+    if (userRole !== 'APPROVER' && userRole !== 'ADMIN') {
+      return res.status(403).json({ message: 'Unauthorized to update expense status.' });
+    }
+
+    const validStatuses = ['APPROVED', 'DECLINED'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ message: 'Invalid expense status.' });
+    }
+
+    const expense = await database.getExpenseById(id);
+    if (!expense) {
+      return res.status(404).json({ message: 'Expense not found.' });
+    }
+
+    if (expense.status !== 'PENDING' && userRole === 'APPROVER') {
+      return res.status(403).json({ message: 'Expense is not pending approval.' });
+    }
+
+    const approvedOrDeclinedAt = new Date().toISOString();
+    await database.updateExpenseStatus(id, status, approvedOrDeclinedAt);
+
+    const updatedExpense = await database.getExpenseById(id);
+
+    // Email notification to Submitter
+    const emailSubject = status === 'APPROVED' 
+      ? "Your Expense Has Been Approved" 
+      : "Your Expense Has Been Declined";
+    const emailBody = `Your expense submission has been ${status.toLowerCase()}:
+      Name: ${updatedExpense.name}
+      Amount: ${updatedExpense.currency} ${updatedExpense.amount.toFixed(2)}
+      Status: ${status}`;
+
+    sendEmailMock(updatedExpense.submitterEmail, emailSubject, emailBody);
+
+    res.json({ expense: updatedExpense });
+  } catch (error) {
+    console.error("Error updating expense status:", error);
+    res.status(500).json({ message: "Failed to update expense status." });
   }
-
-  // Allow ADMIN to bypass some role checks if needed, but for now, main role is Approver
-  if (userRole !== 'APPROVER' && userRole !== 'ADMIN') {
-    return res.status(403).json({ message: 'Unauthorized to update expense status.' });
-  }
-
-  const validStatuses = ['APPROVED', 'DECLINED'];
-  if (!validStatuses.includes(status)) {
-    return res.status(400).json({ message: 'Invalid expense status.' });
-  }
-
-  const db = readDb();
-  const expenseIndex = db.expenses.findIndex(exp => exp.id === id);
-
-  if (expenseIndex === -1) {
-    return res.status(404).json({ message: 'Expense not found.' });
-  }
-
-  // Approvers can only act on PENDING expenses. Admins might have more leeway (not implemented here).
-  if (db.expenses[expenseIndex].status !== 'PENDING' && userRole === 'APPROVER') {
-    return res.status(403).json({ message: 'Expense is not pending approval.' });
-  }
-
-
-  db.expenses[expenseIndex].status = status;
-  db.expenses[expenseIndex].approvedOrDeclinedAt = new Date().toISOString();
-  writeDb(db);
-
-  const updatedExpense = db.expenses[expenseIndex];
-
-  // Email notification to Submitter
-  const emailSubject = status === 'APPROVED' 
-    ? "Your Expense Has Been Approved" 
-    : "Your Expense Has Been Declined";
-  const emailBody = `Your expense submission has been ${status.toLowerCase()}:
-    Name: ${updatedExpense.name}
-    Amount: ${updatedExpense.currency} ${updatedExpense.amount.toFixed(2)}
-    Status: ${status}`;
-
-  sendEmailMock(updatedExpense.submitterEmail, emailSubject, emailBody);
-
-  res.json({ expense: updatedExpense });
 });
-
 
 // --- Global Error Handler (optional basic) ---
 app.use((err, req, res, next) => {
@@ -265,8 +279,38 @@ app.use((err, req, res, next) => {
 });
 
 // --- Start Server ---
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server listening on http://0.0.0.0:${PORT}`);
-  console.log(`Uploads directory: ${UPLOADS_DIR}`);
-  console.log(`Database file: ${DB_FILE}`);
+async function startServer() {
+  await initializeDatabase();
+  
+  // Run migration if db.json exists
+  try {
+    const migrate = require('./migrate.cjs');
+    await migrate();
+  } catch (error) {
+    console.log('Migration skipped or completed previously');
+  }
+  
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server listening on http://0.0.0.0:${PORT}`);
+    console.log(`Uploads directory: ${UPLOADS_DIR}`);
+    console.log(`Database: SQLite (expense_app.db)`);
+  });
+}
+
+// Handle graceful shutdown
+process.on('SIGINT', () => {
+  console.log('\nGracefully shutting down...');
+  database.close();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('\nGracefully shutting down...');
+  database.close();
+  process.exit(0);
+});
+
+startServer().catch(error => {
+  console.error('Failed to start server:', error);
+  process.exit(1);
 });
