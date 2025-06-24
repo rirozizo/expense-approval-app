@@ -1,5 +1,6 @@
 
 export const APP_NAME = "Expense Approval System";
+export const APP_VERSION = "1.0.0";
 
 export const CURRENCIES = ['USD', 'EUR', 'GBP'];
 
