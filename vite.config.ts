@@ -17,11 +17,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       proxy: {
-        "/api": "http://localhost:3001",
+        "/api": "http://0.0.0.0:3001",
       },
-      host: "0.0.0.0",
-      allowedHosts:
-        "37dd5897-8ab2-45fd-8ea6-3d8f4c7ff023-00-gtggtcrwgvb5.sisko.replit.dev",
     },
   };
 });
